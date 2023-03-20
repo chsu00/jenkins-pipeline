@@ -1,0 +1,58 @@
+pipeline {
+   agent any
+   environment {
+        // AWS_PUBLIC_IP = '{ec2-instance-public-ip}'
+        SSH_CMD = 'ssh -o StrictHostKeyChecking=no ubuntu@ec2-3-35-79-180.ap-northeast-2.compute.amazonaws.com'
+        DOCKER = 'sudo docker'
+    }
+   stages {
+       stage('Github') {
+           steps {
+               git branch: 'chs/docker', credentialsId: 'chs-jenkins-test-credentials', url: 'git repo url'
+           }
+       }
+       stage('Build') {
+           steps {
+                  sh "npm install -f"
+                  sh "npm run build"
+                  sh "ls -al"
+                  sh "pwd"
+                // sh "docker build --platform linux/amd64 -t chsu00/armakers ./"
+               
+           }
+       }
+       stage('Deploy') {
+           steps {
+                  sshagent(credentials: ['armakers-be-ssh']) {
+                        // sh 'scp -P 22 -r dist ubuntu@ec2-3-35-79-180.ap-northeast-2.compute.amazonaws.com:/home/ubuntu'
+                        // sh 'scp -P 22 -r node_modules ubuntu@ec2-3-35-79-180.ap-northeast-2.compute.amazonaws.com:/home/ubuntu'
+                        // sh 'scp -P 22  ubuntu@ec2-3-35-79-180.ap-northeast-2.compute.amazonaws.com:/home/ubuntu'
+                        sh '''
+                            scp -P 22 -r dist ubuntu@ec2-3-35-79-180.ap-northeast-2.compute.amazonaws.com:/home/ubuntu/armakers
+                            scp -P 22 nest-cli.json package.json package-lock.json tsconfig.json tsconfig.build.json ubuntu@ec2-3-35-79-180.ap-northeast-2.compute.amazonaws.com:/home/ubuntu/armakers
+                            $SSH_CMD << EOF
+                                ls -al
+                                cd armakers
+                                npm install -production -f
+                                npm install pm2 -f
+                                npm install dd-trace -f
+                                npx pm2 install typescript
+                                npx pm2 kill
+                                pwd
+                                ls -al
+                                npm run start:prod
+                        '''
+                        // sh 'ssh -o StrictHostKeyChecking=no ubuntu@ec2-3-35-79-180.ap-northeast-2.compute.amazonaws.com $DOCKER '
+                  }
+                // script {
+                //     try {
+                //         sh '$SSH_CMD $DOCKER stop front-end'
+                //         sh '$SSH_CMD $DOCKER rm front-end'
+                //     } catch (e) {
+                //         sh 'echo "fail to stop and remove container"'
+                //     }
+                // }
+               }
+       }
+   }
+}
